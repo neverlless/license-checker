@@ -45,3 +45,11 @@ go build
 ```
 
 Once you have the binary, you can run the `license-checker` command from the terminal.
+
+TODO
+
+- [ ] Add support for other languages
+- [ ] Add support for custom license lists
+- [ ] Add support for custom output formats
+- [ ] Add support for custom configuration
+- [ ] Add support for push html report to remote server
