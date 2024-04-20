@@ -20,8 +20,7 @@ Then open the generated `license-report.html` file in your browser to view the r
 
 HTML Report Example:
 
-<img width="901" alt="image" src="https://github.com/neverlless/license-checker/assets/104908866/c2e7453e-b946-4f60-a82a-31975128a8a3">
-
+![image](https://github.com/neverlless/license-checker/assets/104908866/c2e7453e-b946-4f60-a82a-31975128a8a3)
 
 Features
 --------
