@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"html/template"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/neverlless/license-checker/licenses"
@@ -72,17 +71,12 @@ const reportTemplate = `
 </html>
 `
 
-// GenerateHTMLReport generates an HTML license report.
-func GenerateHTMLReport(dependencies []scanner.Dependency, dir string) error {
+func GenerateHTMLReport(dependencies []scanner.Dependency, reportFilePath string) error {
 	funcMap := template.FuncMap{
 		"cleanName": func(name string) string {
 			return strings.Replace(name, "@", "", -1)
 		},
 		"isOSIApproved": func(license string) bool {
-			// We handle the case with "Unknown" separately
-			if license == "Unknown" || license == "License not found" {
-				return false
-			}
 			return licenses.IsOSIApproved(license)
 		},
 	}
@@ -92,8 +86,7 @@ func GenerateHTMLReport(dependencies []scanner.Dependency, dir string) error {
 		return err
 	}
 
-	reportPath := filepath.Join(dir, "license_report.html")
-	file, err := os.Create(reportPath)
+	file, err := os.Create(reportFilePath)
 	if err != nil {
 		return err
 	}
@@ -103,6 +96,6 @@ func GenerateHTMLReport(dependencies []scanner.Dependency, dir string) error {
 		return err
 	}
 
-	fmt.Printf("License report generated: %s\n", reportPath)
+	fmt.Printf("License report generated: %s\n", reportFilePath)
 	return nil
 }
