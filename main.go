@@ -33,64 +33,82 @@ func main() {
 	}
 	fmt.Printf("Defining the Project Type: %s\n", projectType)
 
+	if err := processDependencies(projectType, projectDir, reportNameFlag, apiSendEndpointFlag); err != nil {
+		fmt.Printf("Error: %s\n", err)
+	}
+}
+
+func processDependencies(projectType detector.ProjectType, projectDir string, reportNameFlag, apiSendEndpointFlag *string) error {
 	dependencies, err := scanner.ScanDependencies(string(projectType), projectDir)
 	if err != nil {
-		fmt.Printf("Error while scanning dependencies: %s\n", err)
-		return
+		return fmt.Errorf("error while scanning dependencies: %w", err)
 	}
 
+	warnNonOSIApproved(dependencies)
+
+	reportFileName := filepath.Join(filepath.Dir(projectDir), *reportNameFlag+".html")
+	if err := generateAndSendReport(dependencies, reportFileName, apiSendEndpointFlag); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func warnNonOSIApproved(dependencies []scanner.Dependency) {
 	for _, dep := range dependencies {
 		if !licenses.IsOSIApproved(dep.License) {
 			fmt.Printf("Warning: The %s license for dependency %s is not OSI approved.\n", dep.License, dep.Name)
 		}
 	}
+}
 
-	reportFileName := filepath.Join(filepath.Dir(projectDir), *reportNameFlag+".html")
-	err = report.GenerateHTMLReport(dependencies, reportFileName)
-	if err != nil {
-		fmt.Printf("Error generating license report: %s\n", err)
-		return
+func generateAndSendReport(dependencies []scanner.Dependency, reportFileName string, apiSendEndpointFlag *string) error {
+	if err := report.GenerateHTMLReport(dependencies, reportFileName); err != nil {
+		return fmt.Errorf("error generating license report: %w", err)
 	}
 	fmt.Println("The license report has been successfully generated.")
 
 	if *apiSendEndpointFlag != "" {
-		file, err := os.Open(reportFileName)
-		if err != nil {
-			fmt.Printf("Error opening license report for sending: %s\n", err)
-			return
+		if err := sendReport(reportFileName, *apiSendEndpointFlag); err != nil {
+			return err
 		}
-		defer file.Close()
-
-		var requestBody bytes.Buffer
-		multipartWriter := multipart.NewWriter(&requestBody)
-
-		fileWriter, err := multipartWriter.CreateFormFile("file", filepath.Base(reportFileName))
-		if err != nil {
-			fmt.Printf("Error adding file to multipart message: %s\n", err)
-			return
-		}
-		_, err = io.Copy(fileWriter, file)
-		if err != nil {
-			fmt.Printf("Error writing file to multipart message: %s\n", err)
-			return
-		}
-
-		multipartWriter.Close()
-
-		request, err := http.NewRequest("POST", *apiSendEndpointFlag, &requestBody)
-		if err != nil {
-			fmt.Printf("Error creating request: %s\n", err)
-			return
-		}
-		request.Header.Set("Content-Type", multipartWriter.FormDataContentType())
-
-		response, err := http.DefaultClient.Do(request)
-		if err != nil {
-			fmt.Printf("Error sending license report: %s\n", err)
-			return
-		}
-		defer response.Body.Close()
-
-		fmt.Println("The license report has been successfully sent.")
 	}
+
+	return nil
+}
+
+func sendReport(reportFileName, apiSendEndpoint string) error {
+	file, err := os.Open(reportFileName)
+	if err != nil {
+		return fmt.Errorf("error opening license report for sending: %w", err)
+	}
+	defer file.Close()
+
+	var requestBody bytes.Buffer
+	multipartWriter := multipart.NewWriter(&requestBody)
+
+	fileWriter, err := multipartWriter.CreateFormFile("file", filepath.Base(reportFileName))
+	if err != nil {
+		return fmt.Errorf("error adding file to multipart message: %w", err)
+	}
+	if _, err = io.Copy(fileWriter, file); err != nil {
+		return fmt.Errorf("error writing file to multipart message: %w", err)
+	}
+
+	multipartWriter.Close()
+
+	request, err := http.NewRequest("POST", apiSendEndpoint, &requestBody)
+	if err != nil {
+		return fmt.Errorf("error creating request: %w", err)
+	}
+	request.Header.Set("Content-Type", multipartWriter.FormDataContentType())
+
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		return fmt.Errorf("error sending license report: %w", err)
+	}
+	defer response.Body.Close()
+
+	fmt.Println("The license report has been successfully sent.")
+	return nil
 }
