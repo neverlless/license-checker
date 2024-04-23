@@ -13,7 +13,7 @@ Usage
 
 To use license-checker, specify the path to your project's directory, the name of the report file (optional), and the endpoint to send the report to (optional).
 
-`license-checker -project-dir <path to project> -report-name <report file name> -api-send-endpoint <URL>`
+`license-checker -project-dir <path to project> -report-name <report file name> -api-send-endpoint <URL> -ignore-tls true`
 
 Example:
 `license-checker -project-dir . -report-name custom_name -api-send-endpoint http://localhost:8080/api/filehandler/`
