@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"crypto/tls"
 	"flag"
 	"fmt"
 	"io"
@@ -20,6 +21,7 @@ func main() {
 	projectDirFlag := flag.String("project-dir", ".", "Path to the project directory")
 	reportNameFlag := flag.String("report-name", "license_report", "Name of the report file without extension")
 	apiSendEndpointFlag := flag.String("api-send-endpoint", "", "URL to send the report file via POST request (optional)")
+	ignoreTLSFlag := flag.Bool("ignore-tls", false, "Ignore TLS verification for API endpoint (optional)")
 
 	flag.Parse()
 
@@ -33,12 +35,12 @@ func main() {
 	}
 	fmt.Printf("Defining the Project Type: %s\n", projectType)
 
-	if err := processDependencies(projectType, projectDir, reportNameFlag, apiSendEndpointFlag); err != nil {
+	if err := processDependencies(projectType, projectDir, reportNameFlag, apiSendEndpointFlag, *ignoreTLSFlag); err != nil {
 		fmt.Printf("Error: %s\n", err)
 	}
 }
 
-func processDependencies(projectType detector.ProjectType, projectDir string, reportNameFlag, apiSendEndpointFlag *string) error {
+func processDependencies(projectType detector.ProjectType, projectDir string, reportNameFlag, apiSendEndpointFlag *string, ignoreTLS bool) error {
 	dependencies, err := scanner.ScanDependencies(string(projectType), projectDir)
 	if err != nil {
 		return fmt.Errorf("error while scanning dependencies: %w", err)
@@ -47,7 +49,7 @@ func processDependencies(projectType detector.ProjectType, projectDir string, re
 	warnNonOSIApproved(dependencies)
 
 	reportFileName := filepath.Join(filepath.Dir(projectDir), *reportNameFlag+".html")
-	if err := generateAndSendReport(dependencies, reportFileName, apiSendEndpointFlag); err != nil {
+	if err := generateAndSendReport(dependencies, reportFileName, apiSendEndpointFlag, ignoreTLS); err != nil {
 		return err
 	}
 
@@ -62,14 +64,14 @@ func warnNonOSIApproved(dependencies []scanner.Dependency) {
 	}
 }
 
-func generateAndSendReport(dependencies []scanner.Dependency, reportFileName string, apiSendEndpointFlag *string) error {
+func generateAndSendReport(dependencies []scanner.Dependency, reportFileName string, apiSendEndpointFlag *string, ignoreTLS bool) error {
 	if err := report.GenerateHTMLReport(dependencies, reportFileName); err != nil {
 		return fmt.Errorf("error generating license report: %w", err)
 	}
 	fmt.Println("The license report has been successfully generated.")
 
 	if *apiSendEndpointFlag != "" {
-		if err := sendReport(reportFileName, *apiSendEndpointFlag); err != nil {
+		if err := sendReport(reportFileName, *apiSendEndpointFlag, ignoreTLS); err != nil {
 			return err
 		}
 	}
@@ -77,7 +79,7 @@ func generateAndSendReport(dependencies []scanner.Dependency, reportFileName str
 	return nil
 }
 
-func sendReport(reportFileName, apiSendEndpoint string) error {
+func sendReport(reportFileName, apiSendEndpoint string, ignoreTLS bool) error {
 	file, err := os.Open(reportFileName)
 	if err != nil {
 		return fmt.Errorf("error opening license report for sending: %w", err)
@@ -97,13 +99,21 @@ func sendReport(reportFileName, apiSendEndpoint string) error {
 
 	multipartWriter.Close()
 
+	client := &http.Client{}
+	if ignoreTLS {
+		tr := &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		}
+		client = &http.Client{Transport: tr}
+	}
+
 	request, err := http.NewRequest("POST", apiSendEndpoint, &requestBody)
 	if err != nil {
 		return fmt.Errorf("error creating request: %w", err)
 	}
 	request.Header.Set("Content-Type", multipartWriter.FormDataContentType())
 
-	response, err := http.DefaultClient.Do(request)
+	response, err := client.Do(request)
 	if err != nil {
 		return fmt.Errorf("error sending license report: %w", err)
 	}
